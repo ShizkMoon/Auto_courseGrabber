@@ -1,5 +1,5 @@
 // 上海大学教务系统自动抢课脚本
-// 版本: v2.2.0 (多课程同时抢课版本)
+// 版本: v2.2.0 (多课程同时抢课版本 - 宽松查找增强版)
 // 中欧 信息工程 ceilf
 // https://github.com/ceilf6
 // https://blog.csdn.net/2301_78856868
@@ -12,6 +12,9 @@
 // - 所有课程选完后自动停止
 // - 优化了多课程管理逻辑
 // - 增强了成功选课的验证机制
+// - 【NEW】采用宽松查找策略，大幅提升教学班识别成功率
+// - 【NEW】多重查找方法，渐进式查找确保不遗漏任何教学班
+// - 【NEW】更智能的信息提取，支持多种页面布局格式
 
 // 使用方法:
 // 1. 登录教务系统并进入选课页面
@@ -86,60 +89,22 @@
             }
             
             const courseCode = course.courseCode;
-            const allElements = document.querySelectorAll('*');
-            let courseSection = null;
             
-            // 首先找到课程主行
-            for (let element of allElements) {
-                const text = element.textContent || '';
-                if (text.includes(`(${courseCode})`) || text.includes(courseCode)) {
-                    courseSection = element.closest('div, section, table');
-                    if (courseSection) break;
-                }
-            }
+            // 方法1: 直接在所有表格行中查找课程号
+            const allRows = document.querySelectorAll('table tbody tr, table tr');
+            let courseFound = false;
             
-            if (!courseSection) {
-                // 如果没找到课程区域，尝试表格行方式
-                const courseRows = document.querySelectorAll('table tbody tr');
-                for (let row of courseRows) {
-                    const cells = row.querySelectorAll('td');
-                    for (let cell of cells) {
-                        if (cell.textContent.trim() === courseCode) {
-                            // 找到课程号后，查找同一表格中的所有教学班
-                            const table = row.closest('table');
-                            if (table) {
-                                const allRows = table.querySelectorAll('tbody tr');
-                                for (let classRow of allRows) {
-                                    const selectButton = classRow.querySelector('button, a, input[type="button"]');
-                                    if (selectButton) {
-                                        const classInfo = extractTeachingClassInfo(classRow);
-                                        if (classInfo && classInfo.id) {
-                                            // 添加课程信息到教学班对象
-                                            teachingClasses.push({
-                                                row: classRow,
-                                                info: classInfo,
-                                                button: selectButton,
-                                                courseCode: courseCode,
-                                                targetTeacher: course.teacher,
-                                                targetTime: course.time
-                                            });
-                                        }
-                                    }
-                                }
-                            }
-                            break;
-                        }
-                    }
-                }
-            } else {
-                // 在课程区域内查找所有教学班行
-                const classRows = courseSection.querySelectorAll('tr');
-                for (let row of classRows) {
+            for (let row of allRows) {
+                const rowText = row.textContent || '';
+                
+                // 检查是否包含目标课程号
+                if (rowText.includes(courseCode)) {
+                    courseFound = true;
+                    // 查找该行或相邻行中的选课按钮
                     const selectButton = row.querySelector('button, a, input[type="button"]');
                     if (selectButton) {
                         const classInfo = extractTeachingClassInfo(row);
                         if (classInfo && classInfo.id) {
-                            // 添加课程信息到教学班对象
                             teachingClasses.push({
                                 row: row,
                                 info: classInfo,
@@ -150,12 +115,99 @@
                             });
                         }
                     }
+                    
+                    // 如果当前行没有按钮，检查同一表格的其他行
+                    const table = row.closest('table');
+                    if (table && !selectButton) {
+                        const tableRows = table.querySelectorAll('tbody tr, tr');
+                        for (let tableRow of tableRows) {
+                            const tableRowButton = tableRow.querySelector('button, a, input[type="button"]');
+                            if (tableRowButton) {
+                                const tableRowText = tableRow.textContent || '';
+                                // 确保这行也与目标课程相关（可能是教学班行）
+                                if (tableRowText.includes('选课') || tableRowText.includes('教学班') || tableRowText.match(/\d+\/\d+/)) {
+                                    const classInfo = extractTeachingClassInfo(tableRow);
+                                    if (classInfo && classInfo.id) {
+                                        teachingClasses.push({
+                                            row: tableRow,
+                                            info: classInfo,
+                                            button: tableRowButton,
+                                            courseCode: courseCode,
+                                            targetTeacher: course.teacher,
+                                            targetTime: course.time
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 方法2: 如果没找到该课程，使用更宽松的查找
+            if (!courseFound) {
+                // 查找所有包含"选课"文本的行
+                for (let row of allRows) {
+                    const rowText = row.textContent || '';
+                    if (rowText.includes('选课') && !rowText.includes('退选')) {
+                        const selectButton = row.querySelector('button, a, input[type="button"]');
+                        if (selectButton) {
+                            const classInfo = extractTeachingClassInfo(row);
+                            if (classInfo && classInfo.id) {
+                                teachingClasses.push({
+                                    row: row,
+                                    info: classInfo,
+                                    button: selectButton,
+                                    courseCode: courseCode,
+                                    targetTeacher: course.teacher,
+                                    targetTime: course.time
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // 方法3: 如果还是没找到，查找所有有按钮的行
+            if (teachingClasses.filter(tc => tc.courseCode === courseCode).length === 0) {
+                const buttonRows = document.querySelectorAll('tr');
+                for (let row of buttonRows) {
+                    const selectButton = row.querySelector('button, a, input[type="button"]');
+                    if (selectButton) {
+                        const buttonText = selectButton.textContent || '';
+                        const rowText = row.textContent || '';
+                        // 只有包含选课相关文本的按钮才考虑
+                        if (buttonText.includes('选课') || rowText.includes('选课')) {
+                            const classInfo = extractTeachingClassInfo(row);
+                            if (classInfo && classInfo.id) {
+                                teachingClasses.push({
+                                    row: row,
+                                    info: classInfo,
+                                    button: selectButton,
+                                    courseCode: courseCode,
+                                    targetTeacher: course.teacher,
+                                    targetTime: course.time
+                                });
+                            }
+                        }
+                    }
                 }
             }
         }
         
-        log(`找到 ${teachingClasses.length} 个教学班`);
-        return teachingClasses;
+        // 去重（基于ID和课程号）
+        const uniqueClasses = [];
+        const seenIds = new Set();
+        for (let tc of teachingClasses) {
+            const uniqueKey = `${tc.courseCode}_${tc.info.id}`;
+            if (!seenIds.has(uniqueKey)) {
+                seenIds.add(uniqueKey);
+                uniqueClasses.push(tc);
+            }
+        }
+        
+        log(`找到 ${uniqueClasses.length} 个教学班`);
+        return uniqueClasses;
     }
     
     // 提取教学班信息
@@ -173,26 +225,36 @@
             for (let cell of cells) {
                 const text = cell.textContent.trim();
                 
-                // 提取教学班名称（如：工程化学-0001）
-                if (text.includes('-') && text.match(/\d{4}/)) {
-                    className = text;
-                }
-                
-                // 提取教师信息
-                if (text.includes('【') && text.includes('】')) {
-                    teacher = text;
-                }
-                
-                // 提取容量信息 - 只选择数字/数字格式
-                if (text.match(/\d+\/\d+/)) {
-                    // 只保留数字格式的容量信息
-                    if (!capacity || !capacity.match(/\d+\/\d+/)) {
-                        capacity = text;
+                // 提取教学班名称（更宽松的匹配）
+                if (!className) {
+                    // 匹配 课程名-数字 格式
+                    if (text.includes('-') && text.match(/\d{3,4}/)) {
+                        className = text;
+                    }
+                    // 匹配纯数字教学班号
+                    else if (text.match(/^\d{3,4}$/) && cells.length > 1) {
+                        className = text;
                     }
                 }
                 
+                // 提取教师信息（更宽松的匹配）
+                if (!teacher) {
+                    if (text.includes('【') && text.includes('】')) {
+                        teacher = text;
+                    }
+                    // 匹配教师姓名（中文姓名）
+                    else if (text.match(/^[\u4e00-\u9fa5]{2,4}$/) && !text.includes('星期') && !text.includes('第')) {
+                        teacher = text;
+                    }
+                }
+                
+                // 提取容量信息
+                if (!capacity && text.match(/\d+\/\d+/)) {
+                    capacity = text;
+                }
+                
                 // 提取时间信息
-                if (text.includes('星期') || text.includes('第') || text.includes('节')) {
+                if (!timeInfo && (text.includes('星期') || text.includes('第') || text.includes('节'))) {
                     timeInfo = text;
                 }
             }
@@ -200,35 +262,56 @@
             // 如果没有找到基本信息，尝试从整个行文本中提取
             if (!className || !teacher || !capacity) {
                 // 尝试提取教学班名称
-                const classMatch = fullText.match(/([^-\s]+[-]\d{4})/);
-                if (classMatch) {
-                    className = classMatch[1];
+                if (!className) {
+                    const classMatch = fullText.match(/([^-\s]+[-]\d{3,4})/);
+                    if (classMatch) {
+                        className = classMatch[1];
+                    } else {
+                        // 尝试匹配纯数字教学班号
+                        const numMatch = fullText.match(/\b(\d{3,4})\b/);
+                        if (numMatch) {
+                            className = numMatch[1];
+                        }
+                    }
                 }
                 
                 // 尝试提取教师
-                const teacherMatch = fullText.match(/【([^】]+)】/);
-                if (teacherMatch) {
-                    teacher = `【${teacherMatch[1]}】`;
+                if (!teacher) {
+                    const teacherMatch = fullText.match(/【([^】]+)】/);
+                    if (teacherMatch) {
+                        teacher = `【${teacherMatch[1]}】`;
+                    } else {
+                        // 匹配中文姓名
+                        const nameMatch = fullText.match(/([\u4e00-\u9fa5]{2,4})/);
+                        if (nameMatch && !nameMatch[1].includes('星期') && !nameMatch[1].includes('第')) {
+                            teacher = nameMatch[1];
+                        }
+                    }
                 }
                 
                 // 尝试提取容量
-                const capacityMatch = fullText.match(/(\d+\/\d+|已满)/);
-                if (capacityMatch) {
-                    capacity = capacityMatch[1];
+                if (!capacity) {
+                    const capacityMatch = fullText.match(/(\d+\/\d+|已满)/);
+                    if (capacityMatch) {
+                        capacity = capacityMatch[1];
+                    }
                 }
                 
                 // 尝试提取时间
-                const timeMatch = fullText.match(/(星期[一二三四五六日][^星期]*)/g);
-                if (timeMatch) {
-                    timeInfo = timeMatch.join(' ');
+                if (!timeInfo) {
+                    const timeMatch = fullText.match(/(星期[一二三四五六日][^星期]*)/g);
+                    if (timeMatch) {
+                        timeInfo = timeMatch.join(' ');
+                    }
                 }
             }
             
-            // 更宽松的信息检查 - 只要有按钮就认为是有效的教学班
+            // 更宽松的信息检查 - 只要有按钮或包含选课相关文本就认为是有效的教学班
             const hasButton = row.querySelector('button, a, input[type="button"]') !== null;
+            const hasSelectText = fullText.includes('选课') && !fullText.includes('退选');
             
-            // 生成唯一ID
-            const uniqueId = className || teacher || capacity || fullText.substring(0, 20) || `row_${Date.now()}_${Math.random()}`;
+            // 生成唯一ID（使用行的位置信息作为备用）
+            const uniqueId = className || teacher || capacity || fullText.substring(0, 20) || `row_${Array.from(row.parentNode.children).indexOf(row)}`;
             
             const result = {
                 className: className || '未知教学班',
@@ -236,7 +319,7 @@
                 capacity: capacity || '未知容量',
                 timeInfo: timeInfo || '未知时间',
                 id: `${uniqueId}_${teacher || 'unknown'}`,
-                hasButton: hasButton,
+                hasButton: hasButton || hasSelectText,
                 rawText: fullText.substring(0, 200) // 保留原始文本用于调试
             };
             
@@ -940,4 +1023,7 @@
     console.log('  • 支持按教师和时间筛选');
     console.log('  • 自动识别同一课程的多个教学班');
     console.log('  • 时间冲突时自动尝试其他教学班');
+    console.log('  • 🆕 宽松查找策略，大幅提升教学班识别率');
+    console.log('  • 🆕 多重查找方法，适配不同页面布局');
+    console.log('  • 🆕 智能信息提取，支持多种数据格式');
 })();

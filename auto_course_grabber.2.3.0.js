@@ -1,4 +1,4 @@
-// 上海大学教务系统自动抢课脚本
+// 教务系统自动抢课脚本
 // 中欧 信息工程 ceilf
 // https://github.com/ceilf6
 // https://blog.csdn.net/2301_78856868
@@ -969,7 +969,7 @@ function findAllTeachingClasses() {
     }
     
     // 显示脚本信息
-    console.log('%c🎓 上海大学自动抢课脚本已加载', 'color: #ff6b35; font-size: 18px; font-weight: bold;');
+    console.log('%c🎓 自动抢课脚本已加载', 'color: #ff6b35; font-size: 18px; font-weight: bold;');
     console.log('%c📚 目标课程: ' + (TARGET_COURSE_CODE || '未设置'), 'color: #4ecdc4; font-size: 14px; font-weight: bold;');
     console.log('%c⏰ 定时开抢: ' + (TARGET_START_TIME || '未设置'), 'color: #9370db; font-size: 14px; font-weight: bold;');
     console.log('%c⚡ 使用方法:', 'color: #45b7d1; font-size: 14px; font-weight: bold;');

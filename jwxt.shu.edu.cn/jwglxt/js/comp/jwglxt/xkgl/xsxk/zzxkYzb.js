@@ -209,7 +209,7 @@ jQuery(function($){
 		$.ajaxSetup({async:true});
 		$.post(_path + '/xsxk/zzxkyzb_cxTbXspjzt.html', {}, function (msg, statusText) {}, "json");
 	}
-	//学生配课确认（上海大学）
+	//学生配课确认（）
 	if ($("#xxdm").val()=="10280") {
 		$.ajaxSetup({async: false});
 		$.post(_path + '/xsxk/zzxkyzb_cxXspkqkqr.html', {"xnm": $("#xkxnm").val(), "xqm": $("#xkxqm").val()}, function(data){

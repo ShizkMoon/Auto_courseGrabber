@@ -28,9 +28,9 @@
         // { code: '23306049', priority: 3 }
     ];
 
-    const CHECK_INTERVAL = 500;            // 检查间隔(毫秒)
-    const MAX_ATTEMPTS = 100000;              // 最大尝试次数
-    const MAX_FAILED_ATTEMPTS = 100;          // 最大连续失败次数
+    const CHECK_INTERVAL = 2000;            // 检查间隔(毫秒)
+    const MAX_ATTEMPTS = 1000;              // 最大尝试次数
+    const MAX_FAILED_ATTEMPTS = 10;          // 最大连续失败次数
     const RETRY_DELAY = 3000;               // 重试延迟(毫秒)
     const CONCURRENT_ENABLED = true;        // 是否启用并发抢课
 

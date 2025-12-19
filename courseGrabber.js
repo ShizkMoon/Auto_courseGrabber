@@ -16,12 +16,13 @@
     'use strict';
 
     // ========== 配置参数 ==========
-    // 支持多门课程同时抢课，格式: [{code: '课程号', priority: 优先级(数字越小优先级越高)}]
+    // 支持多门课程同时抢课，格式: [{code: '课程号', priority: 优先级, timeFilter: 时间过滤, teacherFilter: 教师过滤}]
     const TARGET_COURSES = [
         // 示例配置:
-        // { code: 'CS101', priority: 1 },  // 高优先级
-        // { code: 'CS102', priority: 2 },  // 中优先级
-        // { code: 'CS103', priority: 3 }   // 低优先级
+        // { code: 'CS101', priority: 1 },  // 高优先级，无过滤
+        // { code: 'CS102', priority: 2, timeFilter: ['星期一', '星期三'] },  // 只选星期一或星期三的课
+        // { code: 'CS103', priority: 3, teacherFilter: ['张三', '李四'] }   // 只选张三或李四的课
+        // { code: 'CS104', priority: 4, timeFilter: ['第1-2节'], teacherFilter: ['王五'] }  // 同时过滤时间和教师
         { code: '23286514', priority: 1 },
         { code: '23306047', priority: 2 },
         // { code: '23306049', priority: 3 }
@@ -32,6 +33,15 @@
     const MAX_FAILED_ATTEMPTS = 100;          // 最大连续失败次数
     const RETRY_DELAY = 3000;               // 重试延迟(毫秒)
     const CONCURRENT_ENABLED = true;        // 是否启用并发抢课
+
+    // ========== 过滤器配置 ==========
+    // 全局时间过滤器（可选）- 留空表示不过滤，支持多个关键词，满足任意一个即可
+    // 示例: ['星期一', '星期三', '第1-2节', '第11-12节']
+    const GLOBAL_TIME_FILTER = [];
+
+    // 全局教师过滤器（可选）- 留空表示不过滤，支持多个关键词，满足任意一个即可
+    // 示例: ['叶利群', '张三', '讲师']
+    const GLOBAL_TEACHER_FILTER = [];
 
     // ========== 全局状态管理 ==========
     let attemptCount = 0;
@@ -100,6 +110,74 @@
             }
         }
         return true;
+    }
+
+    // 时间模糊匹配函数
+    function matchesTimeFilter(timeInfo, timeFilter) {
+        // 如果没有配置过滤器，返回true（不过滤）
+        if (!timeFilter || timeFilter.length === 0) {
+            return true;
+        }
+
+        // 如果时间信息为空，返回false
+        if (!timeInfo || timeInfo === '未知时间') {
+            return false;
+        }
+
+        // 检查是否匹配任意一个时间关键词
+        for (let keyword of timeFilter) {
+            if (timeInfo.includes(keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // 教师模糊匹配函数
+    function matchesTeacherFilter(teacher, teacherFilter) {
+        // 如果没有配置过滤器，返回true（不过滤）
+        if (!teacherFilter || teacherFilter.length === 0) {
+            return true;
+        }
+
+        // 如果教师信息为空，返回false
+        if (!teacher || teacher === '未知教师') {
+            return false;
+        }
+
+        // 检查是否匹配任意一个教师关键词
+        for (let keyword of teacherFilter) {
+            if (teacher.includes(keyword)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // 检查教学班是否匹配过滤条件
+    function matchesFilters(teachingClass, courseCode) {
+        // 获取该课程的配置
+        const courseConfig = TARGET_COURSES.find(c => c.code === courseCode);
+
+        // 获取时间和教师过滤器（优先使用课程特定配置，否则使用全局配置）
+        const timeFilter = (courseConfig && courseConfig.timeFilter) || GLOBAL_TIME_FILTER;
+        const teacherFilter = (courseConfig && courseConfig.teacherFilter) || GLOBAL_TEACHER_FILTER;
+
+        // 检查时间过滤
+        const timeMatch = matchesTimeFilter(teachingClass.info.timeInfo, timeFilter);
+        if (!timeMatch) {
+            return { match: false, reason: '时间不匹配过滤条件' };
+        }
+
+        // 检查教师过滤
+        const teacherMatch = matchesTeacherFilter(teachingClass.info.teacher, teacherFilter);
+        if (!teacherMatch) {
+            return { match: false, reason: '教师不匹配过滤条件' };
+        }
+
+        return { match: true, reason: '通过过滤' };
     }
 
     // 查找目标课程的所有教学班（支持多课程）
@@ -719,6 +797,15 @@
                 continue;
             }
 
+            // ========== 应用过滤器 ==========
+            const filterResult = matchesFilters(tc, courseCode);
+            if (!filterResult.match) {
+                // 不满足过滤条件，跳过此教学班
+                log(`⏭️ 跳过教学班 ${tc.info.className}: ${filterResult.reason}`, 'info', courseCode);
+                log(`   教师: ${tc.info.teacher}, 时间: ${tc.info.timeInfo}`, 'info', courseCode);
+                continue;
+            }
+
             // 检查容量
             const hasCapacity = checkTeachingClassCapacity(tc);
 
@@ -842,6 +929,26 @@
         log(`⏱️ 检查间隔: ${CHECK_INTERVAL / 1000} 秒`, 'info');
         log(`🎯 最大尝试次数: ${MAX_ATTEMPTS}`, 'info');
         log(`⚡ 并发模式: ${CONCURRENT_ENABLED ? '启用' : '禁用'}`, 'info');
+
+        // 显示过滤器配置
+        if (GLOBAL_TIME_FILTER.length > 0) {
+            log(`🔍 全局时间过滤: ${GLOBAL_TIME_FILTER.join(', ')}`, 'info');
+        }
+        if (GLOBAL_TEACHER_FILTER.length > 0) {
+            log(`🔍 全局教师过滤: ${GLOBAL_TEACHER_FILTER.join(', ')}`, 'info');
+        }
+
+        // 显示每门课程的特定过滤器
+        for (let course of coursesToGrab) {
+            if (typeof course === 'object') {
+                if (course.timeFilter && course.timeFilter.length > 0) {
+                    log(`🔍 [${course.code}] 时间过滤: ${course.timeFilter.join(', ')}`, 'info', course.code);
+                }
+                if (course.teacherFilter && course.teacherFilter.length > 0) {
+                    log(`🔍 [${course.code}] 教师过滤: ${course.teacherFilter.join(', ')}`, 'info', course.code);
+                }
+            }
+        }
 
         // 立即执行一次
         attemptGrabCourse();
@@ -1040,7 +1147,11 @@
                     log(`  有余量: ${checkTeachingClassCapacity(tc)}`, 'info', code);
                     log(`  已尝试: ${state.tried.has(tc.info.id)}`, 'info', code);
                     log(`  时间冲突: ${state.conflicted.has(tc.info.id)}`, 'info', code);
-                    log(`  可选择: ${isSelectAvailable && !isDropAvailable && checkTeachingClassCapacity(tc) && !state.conflicted.has(tc.info.id)}`, 'info', code);
+
+                    // 检查过滤器匹配
+                    const filterResult = matchesFilters(tc, code);
+                    log(`  过滤器: ${filterResult.match ? '✅通过' : '❌' + filterResult.reason}`, 'info', code);
+                    log(`  可选择: ${isSelectAvailable && !isDropAvailable && checkTeachingClassCapacity(tc) && !state.conflicted.has(tc.info.id) && filterResult.match}`, 'info', code);
 
                     debugInfo.push({
                         courseCode: code,
@@ -1052,7 +1163,9 @@
                         hasCapacity: checkTeachingClassCapacity(tc),
                         tried: state.tried.has(tc.info.id),
                         conflicted: state.conflicted.has(tc.info.id),
-                        canSelect: isSelectAvailable && !isDropAvailable && checkTeachingClassCapacity(tc) && !state.conflicted.has(tc.info.id)
+                        filterMatch: filterResult.match,
+                        filterReason: filterResult.reason,
+                        canSelect: isSelectAvailable && !isDropAvailable && checkTeachingClassCapacity(tc) && !state.conflicted.has(tc.info.id) && filterResult.match
                     });
                 });
             }
@@ -1069,7 +1182,38 @@
                 log('✅ 已更新课程配置', 'success');
             },
             getInterval: () => CHECK_INTERVAL,
-            getConcurrentMode: () => CONCURRENT_ENABLED
+            getConcurrentMode: () => CONCURRENT_ENABLED,
+            getGlobalTimeFilter: () => GLOBAL_TIME_FILTER,
+            getGlobalTeacherFilter: () => GLOBAL_TEACHER_FILTER,
+            // 显示过滤器信息
+            showFilters: () => {
+                console.log('%c=== 过滤器配置 ===', 'color: #00ffff; font-weight: bold; font-size: 16px;');
+                console.log('%c全局时间过滤:', 'color: #ffaa00; font-weight: bold;');
+                if (GLOBAL_TIME_FILTER.length > 0) {
+                    console.log('  ' + GLOBAL_TIME_FILTER.join(', '));
+                } else {
+                    console.log('  未配置（不过滤）');
+                }
+                console.log('%c全局教师过滤:', 'color: #ffaa00; font-weight: bold;');
+                if (GLOBAL_TEACHER_FILTER.length > 0) {
+                    console.log('  ' + GLOBAL_TEACHER_FILTER.join(', '));
+                } else {
+                    console.log('  未配置（不过滤）');
+                }
+                console.log('%c课程特定过滤:', 'color: #ffaa00; font-weight: bold;');
+                TARGET_COURSES.forEach(course => {
+                    console.log(`  ${course.code}:`);
+                    if (course.timeFilter) {
+                        console.log(`    时间: ${course.timeFilter.join(', ')}`);
+                    }
+                    if (course.teacherFilter) {
+                        console.log(`    教师: ${course.teacherFilter.join(', ')}`);
+                    }
+                    if (!course.timeFilter && !course.teacherFilter) {
+                        console.log(`    无特定过滤`);
+                    }
+                });
+            }
         }
     };
 
@@ -1097,9 +1241,24 @@
     console.log('%c📋 配置示例:', 'color: #9370db; font-weight: bold;');
     console.log('  在脚本顶部修改 TARGET_COURSES:');
     console.log('  const TARGET_COURSES = [');
-    console.log('    { code: "CS101", priority: 1 },  // 高优先级');
-    console.log('    { code: "CS102", priority: 2 },  // 中优先级');
-    console.log('    { code: "CS103", priority: 3 }   // 低优先级');
+    console.log('    { code: "CS101", priority: 1 },  // 高优先级，无过滤');
+    console.log('    { code: "CS102", priority: 2, timeFilter: ["星期一", "第1-2节"] },  // 只选星期一或1-2节的课');
+    console.log('    { code: "CS103", priority: 3, teacherFilter: ["张三", "讲师"] }  // 只选张三或讲师的课');
     console.log('  ];');
+    console.log('%c🔍 过滤器功能:', 'color: #ff1493; font-weight: bold;');
+    console.log('  • timeFilter - 时间过滤（支持星期、节次等关键词）');
+    console.log('  • teacherFilter - 教师过滤（支持教师姓名、职称等关键词）');
+    console.log('  • grab.config.showFilters() - 查看当前过滤器配置');
     console.log('%c💡 提示: 并发模式已' + (CONCURRENT_ENABLED ? '启用' : '禁用'), 'color: #00ffff; font-weight: bold;');
+
+    // 如果配置了过滤器，显示提示
+    if (GLOBAL_TIME_FILTER.length > 0 || GLOBAL_TEACHER_FILTER.length > 0) {
+        console.log('%c⚠️ 已启用全局过滤器:', 'color: #ffa500; font-weight: bold;');
+        if (GLOBAL_TIME_FILTER.length > 0) {
+            console.log('  时间: ' + GLOBAL_TIME_FILTER.join(', '));
+        }
+        if (GLOBAL_TEACHER_FILTER.length > 0) {
+            console.log('  教师: ' + GLOBAL_TEACHER_FILTER.join(', '));
+        }
+    }
 })();

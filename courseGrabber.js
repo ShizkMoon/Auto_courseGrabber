@@ -1964,19 +1964,6 @@
             const timeFilterInput = (timeFilterEl ? timeFilterEl.value : '').trim();
             const teacherFilterInput = (teacherFilterEl ? teacherFilterEl.value : '').trim();
 
-            console.log('[添加课程] 获取输入值:', {
-                课程号: code,
-                优先级: priority,
-                替换课程: replaceCode,
-                时间过滤: timeFilterInput,
-                教师过滤: teacherFilterInput,
-                输入框存在: {
-                    replaceCode: !!replaceCodeEl,
-                    timeFilter: !!timeFilterEl,
-                    teacherFilter: !!teacherFilterEl
-                }
-            });
-
             // 构造最终要推入的课程对象，避免作用域或外部修改影响
             const finalCourse = { code: code, priority: priority };
             if (replaceCode) finalCourse.replaceCode = replaceCode;

@@ -936,6 +936,22 @@
 
             // ========== 应用过滤器 ==========
             const filterResult = matchesFilters(tc, courseCode);
+
+            // 调试日志：显示过滤器配置和匹配结果
+            const courseConfig = TARGET_COURSES.find(c => c.code === courseCode);
+            if (courseConfig && (courseConfig.timeFilter || courseConfig.teacherFilter)) {
+                log(`🔍 过滤器检查 - 教学班: ${tc.info.className}`, 'info', courseCode);
+                if (courseConfig.timeFilter) {
+                    log(`   时间过滤器: [${courseConfig.timeFilter.join(', ')}]`, 'info', courseCode);
+                    log(`   教学班时间: ${tc.info.timeInfo}`, 'info', courseCode);
+                }
+                if (courseConfig.teacherFilter) {
+                    log(`   教师过滤器: [${courseConfig.teacherFilter.join(', ')}]`, 'info', courseCode);
+                    log(`   教学班教师: ${tc.info.teacher}`, 'info', courseCode);
+                }
+                log(`   匹配结果: ${filterResult.match ? '✅通过' : '❌' + filterResult.reason}`, 'info', courseCode);
+            }
+
             if (!filterResult.match) {
                 // 不满足过滤条件，跳过此教学班
                 log(`⏭️ 跳过教学班 ${tc.info.className}: ${filterResult.reason}`, 'info', courseCode);
@@ -1941,18 +1957,32 @@
 
             // 获取替换课程和过滤器
             const replaceCode = document.getElementById('cg-replace-code').value.trim();
-            const timeFilter = document.getElementById('cg-time-filter').value.trim();
-            const teacherFilter = document.getElementById('cg-teacher-filter').value.trim();
+            const timeFilterInput = document.getElementById('cg-time-filter').value.trim();
+            const teacherFilterInput = document.getElementById('cg-teacher-filter').value.trim();
 
             const courseConfig = { code, priority };
             if (replaceCode) {
                 courseConfig.replaceCode = replaceCode;
             }
-            if (timeFilter) {
-                courseConfig.timeFilter = timeFilter.split(',').map(s => s.trim()).filter(s => s);
+            if (timeFilterInput) {
+                const timeFilterArray = timeFilterInput
+                    .split(',')
+                    .map(s => s.trim())
+                    .filter(s => s && s.length > 0);
+
+                if (timeFilterArray.length > 0) {
+                    courseConfig.timeFilter = timeFilterArray;
+                }
             }
-            if (teacherFilter) {
-                courseConfig.teacherFilter = teacherFilter.split(',').map(s => s.trim()).filter(s => s);
+            if (teacherFilterInput) {
+                const teacherFilterArray = teacherFilterInput
+                    .split(',')
+                    .map(s => s.trim())
+                    .filter(s => s && s.length > 0);
+
+                if (teacherFilterArray.length > 0) {
+                    courseConfig.teacherFilter = teacherFilterArray;
+                }
             }
 
             TARGET_COURSES.push(courseConfig);
@@ -1968,13 +1998,14 @@
 
             let logMsg = `已添加课程: ${code} (优先级: ${priority})`;
             if (courseConfig.replaceCode) logMsg += ` [替换: ${courseConfig.replaceCode}]`;
-            if (courseConfig.timeFilter) logMsg += ` [时间过滤]`;
-            if (courseConfig.teacherFilter) logMsg += ` [教师过滤]`;
+            if (courseConfig.timeFilter && courseConfig.timeFilter.length > 0) {
+                logMsg += ` [时间过滤: ${courseConfig.timeFilter.join(', ')}]`;
+            }
+            if (courseConfig.teacherFilter && courseConfig.teacherFilter.length > 0) {
+                logMsg += ` [教师过滤: ${courseConfig.teacherFilter.join(', ')}]`;
+            }
             addUILog('success', logMsg);
-        };
 
-        // 开始抢课
-        document.getElementById('cg-start-btn').onclick = () => {
             if (TARGET_COURSES.length === 0) {
                 alert('请先添加至少一门课程！');
                 return;

@@ -505,6 +505,84 @@
         }
     }
 
+    // 退选指定课程
+    function dropCourse(courseCode) {
+        return new Promise((resolve) => {
+            try {
+                log(`🔄 开始退选课程: ${courseCode}`, 'info', courseCode);
+
+                // 查找该课程的所有教学班
+                const teachingClasses = findAllTeachingClasses(courseCode);
+
+                if (teachingClasses.length === 0) {
+                    log(`未找到课程 ${courseCode} 的教学班`, 'warning', courseCode);
+                    resolve(false);
+                    return;
+                }
+
+                // 查找包含"退选"按钮的教学班
+                let dropClass = null;
+                for (let tc of teachingClasses) {
+                    const rowText = tc.row ? tc.row.textContent : '';
+                    if (rowText.includes('退选')) {
+                        dropClass = tc;
+                        break;
+                    }
+                }
+
+                if (!dropClass) {
+                    log(`课程 ${courseCode} 未找到可退选的教学班`, 'warning', courseCode);
+                    resolve(false);
+                    return;
+                }
+
+                // 查找退选按钮
+                const row = dropClass.row;
+                const allElements = row.querySelectorAll('*');
+                let dropButton = null;
+
+                for (let element of allElements) {
+                    const elementText = element.textContent.trim();
+                    if (elementText === '退选' || elementText.includes('退选')) {
+                        if (element.tagName === 'BUTTON' || element.tagName === 'A' || element.onclick || element.getAttribute('onclick')) {
+                            dropButton = element;
+                            break;
+                        }
+                    }
+                }
+
+                if (!dropButton) {
+                    log(`未找到课程 ${courseCode} 的退选按钮`, 'warning', courseCode);
+                    resolve(false);
+                    return;
+                }
+
+                log(`找到退选按钮，正在点击...`, 'info', courseCode);
+                dropButton.click();
+
+                // 等待并确认退选
+                setTimeout(() => {
+                    // 查找确认按钮
+                    const confirmButtons = document.querySelectorAll('button, input[type="button"], a');
+                    for (let btn of confirmButtons) {
+                        const text = btn.textContent.trim();
+                        if (text.includes('确定') || text.includes('确认') || text.includes('OK')) {
+                            btn.click();
+                            log(`✅ 已确认退选课程 ${courseCode}`, 'success', courseCode);
+                            setTimeout(() => resolve(true), 1000);
+                            return;
+                        }
+                    }
+                    resolve(false);
+                }, 500);
+
+            } catch (error) {
+                log(`退选课程失败: ${error.message}`, 'error', courseCode);
+                resolve(false);
+            }
+        });
+    }
+
     // 尝试选择教学班
     function selectTeachingClass(teachingClass) {
         if (!teachingClass || !teachingClass.row) return false;
@@ -812,15 +890,39 @@
             const hasCapacity = checkTeachingClassCapacity(tc);
 
             if (hasCapacity) {
-                // 有余量，直接尝试选课
+                // 有余量，检查是否需要先退选其他课程
                 log(`🎯 发现有余量的教学班: ${tc.info.className}`, 'success', courseCode);
                 log(`📚 教师: ${tc.info.teacher}`, 'info', courseCode);
                 log(`⏰ 时间: ${tc.info.timeInfo}`, 'info', courseCode);
                 log(`👥 容量: ${tc.info.capacity}`, 'info', courseCode);
 
-                const selectResult = selectTeachingClass(tc);
-                if (selectResult) {
-                    return; // 尝试选课后等待结果
+                // 获取课程配置
+                const courseConfig = TARGET_COURSES.find(c => c.code === courseCode);
+
+                // 如果配置了替换课程，先执行退选
+                if (courseConfig && courseConfig.replaceCode) {
+                    log(`🔄 检测到需要替换课程 ${courseConfig.replaceCode}，先退选...`, 'info', courseCode);
+
+                    // 异步执行退选，然后选课
+                    dropCourse(courseConfig.replaceCode).then(dropSuccess => {
+                        if (dropSuccess) {
+                            log(`✅ 退选成功，开始选择新课程`, 'success', courseCode);
+                            // 等待一小段时间后选课
+                            setTimeout(() => {
+                                selectTeachingClass(tc);
+                            }, 1000);
+                        } else {
+                            log(`⚠️ 退选失败，跳过本次选课尝试`, 'warning', courseCode);
+                            state.selecting = false;
+                        }
+                    });
+                    return; // 等待异步退选完成
+                } else {
+                    // 没有配置替换课程，直接选课
+                    const selectResult = selectTeachingClass(tc);
+                    if (selectResult) {
+                        return; // 尝试选课后等待结果
+                    }
                 }
             } else {
                 // 没有余量，但时间不冲突，设置标志
@@ -1646,7 +1748,11 @@
                     <input type="text" class="cg-input" id="cg-course-code" placeholder="课程号 (例: 23286514)">
                     <input type="number" class="cg-input" id="cg-course-priority" placeholder="优先级 (数字越小优先级越高)" value="1" min="1">
                     
-                    <div class="cg-section-title" style="font-size: 13px; margin-top: 12px; margin-bottom: 8px;">🔍 该课程的过滤器 (可选)</div>
+                    <div class="cg-section-title" style="font-size: 13px; margin-top: 12px; margin-bottom: 8px;">� 替换课程 (可选)</div>
+                    <input type="text" class="cg-input cg-filter-input" id="cg-replace-code" placeholder="要替换的课程号 (例: 23306047)">
+                    <div class="cg-help-text">选中新课程前，先退选此课程（用于换课）</div>
+                    
+                    <div class="cg-section-title" style="font-size: 13px; margin-top: 12px; margin-bottom: 8px;">�🔍 该课程的过滤器 (可选)</div>
                     <input type="text" class="cg-input cg-filter-input" id="cg-time-filter" placeholder="时间过滤 (例: 星期一,第1-2节)">
                     <div class="cg-help-text">多个关键词用逗号分隔，满足任意一个即可</div>
                     <input type="text" class="cg-input cg-filter-input" id="cg-teacher-filter" placeholder="教师过滤 (例: 叶利群,讲师)">
@@ -1772,11 +1878,15 @@
                 return;
             }
 
-            // 获取过滤器
+            // 获取替换课程和过滤器
+            const replaceCode = document.getElementById('cg-replace-code').value.trim();
             const timeFilter = document.getElementById('cg-time-filter').value.trim();
             const teacherFilter = document.getElementById('cg-teacher-filter').value.trim();
 
             const courseConfig = { code, priority };
+            if (replaceCode) {
+                courseConfig.replaceCode = replaceCode;
+            }
             if (timeFilter) {
                 courseConfig.timeFilter = timeFilter.split(',').map(s => s.trim()).filter(s => s);
             }
@@ -1789,12 +1899,14 @@
             // 清空所有输入
             document.getElementById('cg-course-code').value = '';
             document.getElementById('cg-course-priority').value = '1';
+            document.getElementById('cg-replace-code').value = '';
             document.getElementById('cg-time-filter').value = '';
             document.getElementById('cg-teacher-filter').value = '';
 
             updateCourseList();
 
             let logMsg = `已添加课程: ${code} (优先级: ${priority})`;
+            if (courseConfig.replaceCode) logMsg += ` [替换: ${courseConfig.replaceCode}]`;
             if (courseConfig.timeFilter) logMsg += ` [时间过滤]`;
             if (courseConfig.teacherFilter) logMsg += ` [教师过滤]`;
             addUILog('success', logMsg);
@@ -1870,11 +1982,14 @@
         }
 
         list.innerHTML = TARGET_COURSES.map((course, index) => {
-            const hasFilters = course.timeFilter || course.teacherFilter;
+            const hasConfig = course.replaceCode || course.timeFilter || course.teacherFilter;
 
             let filterHTML = '';
-            if (hasFilters) {
+            if (hasConfig) {
                 filterHTML = '<div class="cg-course-filters">';
+                if (course.replaceCode) {
+                    filterHTML += `<div class="cg-course-filter-item"><span class="cg-filter-label">🔄 替换:</span><span>${course.replaceCode}</span></div>`;
+                }
                 if (course.timeFilter) {
                     filterHTML += `<div class="cg-course-filter-item"><span class="cg-filter-label">⏰ 时间:</span><span>${course.timeFilter.join(', ')}</span></div>`;
                 }
@@ -1883,7 +1998,7 @@
                 }
                 filterHTML += '</div>';
             } else {
-                filterHTML = '<div class="cg-course-meta" style="opacity: 0.6;">🔓 无过滤条件</div>';
+                filterHTML = '<div class="cg-course-meta" style="opacity: 0.6;">🔓 无配置</div>';
             }
 
             return `
@@ -1915,10 +2030,13 @@
     window.editCourseUI = (index) => {
         const course = TARGET_COURSES[index];
 
-        const timeFilter = prompt(
-            `编辑课程 ${course.code} 的时间过滤器\n\n多个关键词用逗号分隔，留空表示不过滤\n例如: 星期一,第1-2节`,
-            course.timeFilter ? course.timeFilter.join(',') : ''
+        const replaceCode = prompt(
+            `编辑课程 ${course.code} 的替换课程\n\n输入要替换的课程号，留空表示不替换\n例如: 23306047`,
+            course.replaceCode || ''
         );
+
+        if (replaceCode === null) return; // 用户取消
+
 
         if (timeFilter === null) return; // 用户取消
 
@@ -1930,6 +2048,12 @@
         if (teacherFilter === null) return; // 用户取消
 
         // 更新课程配置
+        if (replaceCode.trim()) {
+            course.replaceCode = replaceCode.trim();
+        } else {
+            delete course.replaceCode;
+        }
+
         if (timeFilter.trim()) {
             course.timeFilter = timeFilter.split(',').map(s => s.trim()).filter(s => s);
         } else {

@@ -1323,8 +1323,13 @@
             jQuery.ajaxSetup({
                 async: false
             });
-            a.post(_path + "/nImport/import_cxDcWXSQBJ.html",function(g) {
-                if ('1' == g){
+            a.post(_path + "/nImport/import_cxDcWXSQBJ.html",{dcclbh: d},function(g) {
+                var dcbj = g.split('_')[0];
+                if ('-1' == dcbj){
+                    sfkdc = false;
+                    $.alert(g.split('_')[1], function() {})
+                }
+                if ('1' == dcbj){
                     sfkdc = false;
                     // 生成弹框，展示微信二维码，进行扫码认证
                     a.dialog({
@@ -1351,13 +1356,50 @@
                         }
                     })
                 }
-                jQuery.ajaxSetup({
-                    async: true
-                });
+                if ('2' == dcbj){
+                    // 使用邮件进行导出安全认证
+                    sfkdc = false;
+                    a.post(_path + "/nImport/import_cxSfBdxrsb.html",function(v) {
+                        if(v=='0'){
+                            $.alert("您暂未维护邮箱，请先维护邮箱再试！");
+                        }else if (v == '2'){
+                            // 直接通行
+                            sfkdc = true;
+                        }else {
+                            // 生成弹框，展示微信二维码，进行扫码认证
+                            a.dialog({
+                                title: a.i18n.bootbox.titles["emailVerify"],
+                                href: _path + "/nImport/import_cxYxrzView.html",
+                                data: {
+                                    dcclbh: d
+                                },
+                                width: "500px",
+                                modalName: "emailModal",
+                                buttons: {
+                                    success: {
+                                        label: a.i18n.bootbox.buttons["export"],
+                                        className: "btn-primary",
+                                        callback: function() {
+                                            //重新进行导出
+                                            a.exportDialog(b, d, l, m, g, p,'true');
+                                        }
+                                    },
+                                    cancel: {
+                                        label: a.i18n.bootbox.buttons["cancel"],
+                                        className: "btn-default"
+                                    }
+                                }
+                            })
+                        }
+                    })
+                }
             });
             if (!sfkdc){
                 return;
             }
+            jQuery.ajaxSetup({
+                async: true
+            });
         }
 
         var o = _path + "/zftal/drdc/export_exportInitDcpz.html";
@@ -1395,7 +1437,7 @@
 					j["colConfig[" + k + "].zd"] = f.name;
 					j["colConfig[" + k + "].zdmc"] = f.label;
 					j["colConfig[" + k + "].xssx"] = k;
-                    j["colConfig[" + k + "].sfsz"] = f.isnumber?'1':'0';
+					j["colConfig[" + k + "].sfsz"] = f.isnumber?'1':'0';
 					k++
 				}	
 			}
@@ -1460,7 +1502,7 @@
                 dcclbh: d,
 				mrwjm: w
             },
-            width: "900px",
+            width: $('#hidxxdm').val() == '10564'?"1300px":"900px",
             modalName: "ExportModal",
             buttons: {
                 bcdc: {

@@ -291,7 +291,7 @@
             if (this.results_showing) {
                 return this.winnow_results()
             }
-			
+
         }
         ;
 		 h.prototype.results_update_newField = function() {
@@ -302,7 +302,7 @@
             this.result_clear_highlight();
             this.results_build();
            return this.winnow_results()
-			
+
         }
         ;
         h.prototype.results_resized_field = function() {
@@ -678,7 +678,7 @@
             if (this.is_multiple) {
                 this.container.html('<ul class="chosen-choices"><li class="search-field"><input type="text" value="' + this.default_text + '" class="default" autocomplete="off" name="autocomplete" style="width:25px;" /></li></ul><div class="chosen-drop"><ul class="chosen-results"></ul></div>')
             } else {
-                this.container.html('<a class="chosen-single chosen-default" tabindex="-1"><span>' + this.default_text + '</span><div><b></b></div></a><div class="chosen-drop"><div class="chosen-search"><input type="text" autocomplete="off" name="autocomplete" /></div><ul class="chosen-results"></ul></div>')
+                this.container.html('<a class="chosen-single chosen-default" tabindex="-1"><span class="chosen-spanText">' + this.default_text + '</span><div class="drop-icon"><b></b></div></a><div class="chosen-drop"><div class="chosen-search"><input type="text" autocomplete="off" name="autocomplete" /></div><ul class="chosen-results"></ul></div>')
             }
             this.form_field_jq.hide().after(this.container);
             this.dropdown = this.container.find("div.chosen-drop").first();
@@ -703,6 +703,25 @@
         ;
         i.prototype.register_observers = function() {
             var j = this;
+             //ljw 点击关闭时触发
+            if(!this.is_multiple){
+                j.container.off('mousedown.chosen','.chosen-single-close').on('mousedown.chosen','.chosen-single-close',function(k){
+                    // k.stopImmediatePropagation();
+                    k.stopPropagation(); // 禁止事件冒泡
+                    k.preventDefault();
+                    j.reset_single_select_options()
+
+                    var targetIndex = Array.from($(j.form_field).find('option')).findIndex(function(item,index) {
+                        return $(item).text().trim() === j.emptyText
+                    });
+                    // console.log(targetIndex,'targetIndex')
+                    if(targetIndex>-1){
+                        j.form_field.options[targetIndex].selected = true;
+                        j.single_set_selected_text(j.emptyText)
+                        $(j.form_field).trigger('change')
+                    }
+                })
+            }
             this.container.bind("touchstart.chosen", function(k) {
                 j.container_mousedown(k)
             });
@@ -1048,6 +1067,7 @@
         }
         ;
         i.prototype.update_results_content = function(j) {
+            //ljw ul的改变
             return this.search_results.html(j)
         }
         ;
@@ -1211,6 +1231,7 @@
                 k = this.results_data[l[0].getAttribute("data-option-array-index")];
                 k.selected = true;
                 this.form_field.options[k.options_index].selected = true;
+                // console.log('ljw val改变')
                 this.selected_option_count = null;
                 if (this.is_multiple) {
                     this.choice_build(k)
@@ -1241,6 +1262,23 @@
                 this.single_deselect_control_build();
                 this.selected_item.removeClass("chosen-default")
             }
+            // ljw 如果select为空时去掉关闭
+            if(!$(this.form_field).val()){
+                this.container.find('.chosen-single-close').remove()
+            }else{
+            // 否则 1.有值2.有全部 总长度大于1 3.不是禁止 则加一个关闭
+                if($(this.form_field).val() && !this.is_multiple && !$(this.form_field).attr('disabled')){
+                    var options = $(this.form_field).find('option').length
+                    var emptyOptions = $(this.form_field).find('option[value=""]')
+                    this.emptyText = emptyOptions.text();
+                    if(emptyOptions.length && options>1){
+                        if(!this.container.find('.chosen-single-close').length){
+                            this.container.find('.chosen-spanText').after('<p class="chosen-single-close">x</p>')
+                        }
+                    }
+                }
+            }
+           // console.log('text改变')
             return this.selected_item.find("span").text(j)
         }
         ;

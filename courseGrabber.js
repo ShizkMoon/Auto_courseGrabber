@@ -330,7 +330,6 @@
     // 提取教学班信息
     function extractTeachingClassInfo(row) {
         try {
-            const cells = row.querySelectorAll('td');
             let className = '';
             let teacher = '';
             let capacity = '';
@@ -339,65 +338,101 @@
             // 记录原始文本用于调试
             const fullText = row.textContent || row.innerText || '';
 
-            for (let cell of cells) {
-                const text = cell.textContent.trim();
+            // 优先使用表格特定类名提取信息（更准确）
+            // .jxbmc - 教学班名称
+            const jxbmcEl = row.querySelector('.jxbmc, td.jxbmc');
+            if (jxbmcEl) {
+                className = jxbmcEl.textContent.trim();
+            }
 
-                // 提取教学班名称（如：工程化学-0001）
-                if (text.includes('-') && text.match(/\d{4}/)) {
-                    className = text;
-                }
+            // .jsxmzc - 上课教师（格式：【教师名】职称）
+            const jsxmzcEl = row.querySelector('.jsxmzc, td.jsxmzc');
+            if (jsxmzcEl) {
+                teacher = jsxmzcEl.textContent.trim();
+            }
 
-                // 提取教师信息
-                if (text.includes('【') && text.includes('】')) {
-                    teacher = text;
-                }
+            // .sksj - 上课时间
+            const sksjEl = row.querySelector('.sksj, td.sksj');
+            if (sksjEl) {
+                timeInfo = sksjEl.textContent.trim();
+            }
 
-                // 提取容量信息 - 只选择数字/数字格式
-                if (text.match(/\d+\/\d+/)) {
-                    // 只保留数字格式的容量信息
-                    if (!capacity || !capacity.match(/\d+\/\d+/)) {
+            // .rsxx - 已选/容量（格式：【36/50】）
+            const rsxxEl = row.querySelector('.rsxx, td.rsxx');
+            if (rsxxEl) {
+                capacity = rsxxEl.textContent.trim();
+            }
+
+            // 如果通过类名没找到，回退到遍历所有单元格
+            if (!className || !teacher || !capacity || !timeInfo) {
+                const cells = row.querySelectorAll('td');
+                for (let cell of cells) {
+                    const text = cell.textContent.trim();
+
+                    // 提取教学班名称（如：工程化学-0001）
+                    if (!className && text.includes('-') && text.match(/\d{4}/)) {
+                        className = text;
+                    }
+
+                    // 提取教师信息
+                    if (!teacher && text.includes('【') && text.includes('】')) {
+                        teacher = text;
+                    }
+
+                    // 提取容量信息 - 只选择数字/数字格式
+                    if (!capacity && text.match(/\d+\/\d+/)) {
                         capacity = text;
                     }
-                }
 
-                // 提取时间信息
-                if (text.includes('星期') || text.includes('第') || text.includes('节')) {
-                    timeInfo = text;
+                    // 提取时间信息
+                    if (!timeInfo && (text.includes('星期') || text.includes('第') || text.includes('节'))) {
+                        timeInfo = text;
+                    }
                 }
             }
 
-            // 如果没有找到基本信息，尝试从整个行文本中提取
+            // 如果仍未找到基本信息，尝试从整个行文本中提取
             if (!className || !teacher || !capacity) {
                 // 尝试提取教学班名称
-                const classMatch = fullText.match(/([^-\s]+[-]\d{4})/);
-                if (classMatch) {
-                    className = classMatch[1];
+                if (!className) {
+                    const classMatch = fullText.match(/([^-\s]+[-]\d{4})/);
+                    if (classMatch) {
+                        className = classMatch[1];
+                    }
                 }
 
                 // 尝试提取教师
-                const teacherMatch = fullText.match(/【([^】]+)】/);
-                if (teacherMatch) {
-                    teacher = `【${teacherMatch[1]}】`;
+                if (!teacher) {
+                    const teacherMatch = fullText.match(/【([^】]+)】/);
+                    if (teacherMatch) {
+                        teacher = `【${teacherMatch[1]}】`;
+                    }
                 }
 
                 // 尝试提取容量
-                const capacityMatch = fullText.match(/(\d+\/\d+|已满)/);
-                if (capacityMatch) {
-                    capacity = capacityMatch[1];
+                if (!capacity) {
+                    const capacityMatch = fullText.match(/(\d+\/\d+|已满)/);
+                    if (capacityMatch) {
+                        capacity = capacityMatch[1];
+                    }
                 }
 
                 // 尝试提取时间
-                const timeMatch = fullText.match(/(星期[一二三四五六日][^星期]*)/g);
-                if (timeMatch) {
-                    timeInfo = timeMatch.join(' ');
+                if (!timeInfo) {
+                    const timeMatch = fullText.match(/(星期[一二三四五六日][^星期]*)/g);
+                    if (timeMatch) {
+                        timeInfo = timeMatch.join(' ');
+                    }
                 }
             }
 
             // 更宽松的信息检查 - 只要有按钮就认为是有效的教学班
             const hasButton = row.querySelector('button, a, input[type="button"]') !== null;
 
-            // 生成唯一ID
-            const uniqueId = className || teacher || capacity || fullText.substring(0, 20) || `row_${Date.now()}_${Math.random()}`;
+            // 生成唯一ID（优先使用 jxb_id）
+            const jxbIdEl = row.querySelector('.jxb_id, div.jxb_id');
+            const jxbId = jxbIdEl ? jxbIdEl.textContent.trim() : '';
+            const uniqueId = jxbId || className || teacher || capacity || fullText.substring(0, 20) || `row_${Date.now()}_${Math.random()}`;
 
             const result = {
                 className: className || '未知教学班',
@@ -405,6 +440,7 @@
                 capacity: capacity || '未知容量',
                 timeInfo: timeInfo || '未知时间',
                 id: `${uniqueId}_${teacher || 'unknown'}`,
+                jxbId: jxbId, // 保存教学班ID，可能用于后续操作
                 hasButton: hasButton,
                 rawText: fullText.substring(0, 200) // 保留原始文本用于调试
             };
@@ -419,13 +455,16 @@
                 capacity: '未知容量',
                 timeInfo: '未知时间',
                 id: `error_${Date.now()}_${Math.random()}`,
+                jxbId: '',
                 hasButton: false,
                 rawText: (row.textContent || '').substring(0, 200)
             };
         }
     }
 
-    // 检查教学班是否有余量
+    // 检查教学班是否可选课
+    // 逻辑：检查 .full 元素是否可见，如果可见且显示"已满"则不选
+    // 否则只要有数字格式的容量信息就尝试选课
     function checkTeachingClassCapacity(teachingClass) {
         try {
             // 确保teachingClass和info存在
@@ -433,94 +472,39 @@
                 return false;
             }
 
+            const row = teachingClass.row;
+            if (!row) {
+                return false;
+            }
+
+            // 检查 .full 元素是否可见（教务系统的"已满"标识）
+            // 注意：即使有余量，.full 元素也可能存在但 display:none
+            const fullElement = row.querySelector('.full, td.full');
+            if (fullElement) {
+                const style = window.getComputedStyle(fullElement);
+                const isVisible = style.display !== 'none' && style.visibility !== 'hidden';
+                if (isVisible && fullElement.textContent.includes('已满')) {
+                    return false;
+                }
+            }
+
+            // 检查 .rsxx 元素中的容量信息（格式：【36/50】）
+            const rsxxElement = row.querySelector('.rsxx, td.rsxx');
+            if (rsxxElement) {
+                const rsxxText = rsxxElement.textContent || '';
+                // 只要有数字格式就认为可以选课
+                if (/\d+\/\d+/.test(rsxxText)) {
+                    return true;
+                }
+            }
+
+            // 备用：检查整行是否有数字格式的容量信息
             const capacity = teachingClass.info.capacity;
-
-            // 在同一行中查找所有容量信息
-            const rowText = teachingClass.row ? teachingClass.row.textContent : '';
-            const allCapacityMatches = rowText.match(/\d+\/\d+/g) || [];
-
-            // 优先检查标准格式 "当前人数/最大容量" (如: 125/127)
-            let match = capacity.match(/^(\d+)\/(\d+)$/);
-            if (match) {
-                const current = parseInt(match[1]);
-                const max = parseInt(match[2]);
-                return current < max;
+            if (capacity && /\d+/.test(capacity) && !capacity.includes('已满')) {
+                return true;
             }
 
-            // 如果当前容量信息不是标准格式，在所有容量信息中查找标准格式
-            for (let capacityInfo of allCapacityMatches) {
-                match = capacityInfo.match(/^(\d+)\/(\d+)$/);
-                if (match) {
-                    const current = parseInt(match[1]);
-                    const max = parseInt(match[2]);
-                    // 排除明显不合理的数据（如 0/0）
-                    if (max > 0 && max < 1000) {
-                        return current < max;
-                    }
-                }
-            }
-
-            // 格式: "135/0/0" - 只取第一个数字作为容量上限
-            match = capacity.match(/^(\d+)\/\d+\/\d+$/);
-            if (match) {
-                const maxCapacity = parseInt(match[1]);
-
-                // 在其他容量信息中查找真正的已选人数
-                for (let capacityInfo of allCapacityMatches) {
-                    const currentMatch = capacityInfo.match(/^(\d+)\/(\d+)$/);
-                    if (currentMatch) {
-                        const currentCount = parseInt(currentMatch[1]);
-                        const actualCapacity = parseInt(currentMatch[2]);
-                        if (actualCapacity === maxCapacity) {
-                            return currentCount < maxCapacity;
-                        }
-                    }
-                }
-
-                // 如果找不到匹配的，继续查找其他可能的人数/容量组合
-                for (let capacityInfo of allCapacityMatches) {
-                    const currentMatch = capacityInfo.match(/^(\d+)\/(\d+)$/);
-                    if (currentMatch) {
-                        const currentCount = parseInt(currentMatch[1]);
-                        const actualCapacity = parseInt(currentMatch[2]);
-                        return currentCount < actualCapacity;
-                    }
-                }
-
-                // 如果完全没有找到人数/容量信息，则无法判断
-                return false;
-            }
-
-            // 格式: 单独的数字 - 无法判断，需要其他容量信息
-            match = capacity.match(/^(\d+)$/);
-            if (match) {
-                // 在其他容量信息中查找人数/容量对比
-                for (let capacityInfo of allCapacityMatches) {
-                    const currentMatch = capacityInfo.match(/^(\d+)\/(\d+)$/);
-                    if (currentMatch) {
-                        const currentCount = parseInt(currentMatch[1]);
-                        const actualCapacity = parseInt(currentMatch[2]);
-                        return currentCount < actualCapacity;
-                    }
-                }
-
-                return false;
-            }
-
-            // 如果容量信息无法解析，尝试在行中查找任何人数/容量信息
-            if (allCapacityMatches.length > 0) {
-                for (let capacityInfo of allCapacityMatches) {
-                    const currentMatch = capacityInfo.match(/^(\d+)\/(\d+)$/);
-                    if (currentMatch) {
-                        const currentCount = parseInt(currentMatch[1]);
-                        const actualCapacity = parseInt(currentMatch[2]);
-                        if (actualCapacity > 0 && actualCapacity < 1000) {
-                            return currentCount < actualCapacity;
-                        }
-                    }
-                }
-            }
-
+            // 无法判断容量信息，默认不选
             return false;
         } catch (error) {
             return false;
@@ -2306,19 +2290,16 @@
     // 更新状态显示
     function updateStatusDisplay() {
         const statusText = document.getElementById('cg-status-text');
-        const attemptCount = document.getElementById('cg-attempt-count');
-        const successCount = document.getElementById('cg-success-count');
 
-        if (isRunning) {
-            statusText.innerHTML = '<span class="cg-status-dot"></span>运行中';
-            statusText.className = 'cg-badge-running';
-        } else {
-            statusText.textContent = '未运行';
-            statusText.className = '';
+        if (statusText) {
+            if (isRunning) {
+                statusText.innerHTML = '<span class="cg-status-dot"></span>运行中';
+                statusText.className = 'cg-badge-running';
+            } else {
+                statusText.textContent = '未运行';
+                statusText.className = '';
+            }
         }
-
-        attemptCount.textContent = attemptCount || 0;
-        successCount.textContent = selectedCourses.size;
     }
 
     // 添加UI日志

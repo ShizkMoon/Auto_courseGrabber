@@ -1,5 +1,4 @@
-// 教务系统自动抢课脚本 - 多课程并发版本
-// 中欧 信息工程 ceilf
+// 仓库地址（持续维护、更新中）: https://github.com/ceilf6/Auto_courseGrabber
 // https://github.com/ceilf6
 // https://blog.csdn.net/2301_78856868
 // 3506456886@qq.com

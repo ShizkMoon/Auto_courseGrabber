@@ -36,10 +36,14 @@
     'use strict';
 
     // ========== 配置参数 ==========
-    // 支持多门课程同时抢课，格式: [{code: '课程号', priority: 优先级, timeFilter: 时间过滤, teacherFilter: 教师过滤}]
+    // 支持多门课程同时抢课，格式: [{code: '课程号或课程名称', priority: 优先级, timeFilter: 时间过滤, teacherFilter: 教师过滤}]
+    // code 字段支持两种输入方式：
+    //   1. 课程号（纯数字）：如 '23286514'
+    //   2. 课程名称（包含中文）：如 '机器学习'、'计算机控制'
     const TARGET_COURSES = [
         // 示例配置:
-        // { code: 'CS101', priority: 1 },  // 高优先级，无过滤
+        // { code: '23286514', priority: 1 },  // 使用课程号，高优先级，无过滤
+        // { code: '机器学习', priority: 1 },  // 使用课程名称，高优先级，无过滤
         // { code: 'CS102', priority: 2, timeFilter: ['星期一', '星期三'] },  // 只选星期一或星期三的课
         // { code: 'CS103', priority: 3, teacherFilter: ['张三', '李四'] }   // 只选张三或李四的课
         // { code: 'CS104', priority: 4, timeFilter: ['第1-2节'], teacherFilter: ['王五'] }  // 同时过滤时间和教师
@@ -132,15 +136,65 @@
         return filtered;
     }
 
-    function expandCourseByCode(courseCode) {
+    /**
+     * 判断输入是否为课程号（纯数字）
+     * @param {string} input - 用户输入
+     * @returns {boolean} - 是否为课程号
+     */
+    function isCourseCode(input) {
+        return /^\d+$/.test(String(input).trim());
+    }
+
+    /**
+     * 从教学班名称中提取课程名称
+     * 教学班名称格式：课程名称-0001
+     * @param {string} jxbmc - 教学班名称
+     * @returns {string} - 课程名称
+     */
+    function extractCourseNameFromJxbmc(jxbmc) {
+        if (!jxbmc) return '';
+        // 移除末尾的 -数字 部分
+        const match = jxbmc.match(/^(.+)-\d+$/);
+        return match ? match[1].trim() : jxbmc.trim();
+    }
+
+    /**
+     * 展开课程详情（支持课程号和课程名称）
+     * @param {string} courseCodeOrName - 课程号或课程名称
+     * @returns {boolean} - 是否成功展开
+     */
+    function expandCourseByCode(courseCodeOrName) {
         // 找所有课程头
         const heads = document.querySelectorAll('.panel-heading.kc_head');
+        const input = String(courseCodeOrName).trim();
+        const isCode = isCourseCode(input);
 
         for (let head of heads) {
-            const codeInput = head.querySelector('input[name="kch_id"]');
-            if (!codeInput) continue;
+            let matched = false;
 
-            if (codeInput.value === String(courseCode)) {
+            if (isCode) {
+                // 按课程号匹配
+                const codeInput = head.querySelector('input[name="kch_id"]');
+                if (codeInput && codeInput.value === input) {
+                    matched = true;
+                }
+            } else {
+                // 按课程名称匹配
+                // 课程名称在 span.kcmc 下的 <a> 标签内，格式：(课程号)课程名称
+                const kcmcSpan = head.querySelector('span.kcmc');
+                if (kcmcSpan) {
+                    const kcmcLink = kcmcSpan.querySelector('a');
+                    if (kcmcLink) {
+                        const courseName = kcmcLink.textContent.trim();
+                        // 精确匹配或包含匹配
+                        if (courseName === input || courseName.includes(input)) {
+                            matched = true;
+                        }
+                    }
+                }
+            }
+
+            if (matched) {
                 // 直接触发 click（等价于用户点击）
                 head.click();
                 return true;
@@ -290,57 +344,49 @@
         return { match: true, reason: '通过过滤' };
     }
 
-    // 查找目标课程的所有教学班（支持多课程）
-    function findAllTeachingClasses(targetCourseCode) {
-        const teachingClasses = [];
+    /**
+     * 检查教学班行是否匹配目标课程（支持课程号和课程名称）
+     * @param {HTMLElement} row - 教学班行元素
+     * @param {string} targetCourseCodeOrName - 课程号或课程名称
+     * @returns {boolean} - 是否匹配
+     */
+    function isRowMatchingCourse(row, targetCourseCodeOrName) {
+        const input = String(targetCourseCodeOrName).trim();
+        const isCode = isCourseCode(input);
 
-        // 查找包含目标课程号的所有行
-        const allElements = document.querySelectorAll('*');
-        let courseSection = null;
-
-        // 首先找到课程主行
-        for (let element of allElements) {
-            const text = element.textContent || '';
-            if (text.includes(`(${targetCourseCode})`) || text.includes(targetCourseCode)) {
-                courseSection = element.closest('div, section, table');
-                break;
+        if (isCode) {
+            // 按课程号匹配：检查 td.kch_id
+            const kchIdCell = row.querySelector('td.kch_id');
+            if (kchIdCell && kchIdCell.textContent.trim() === input) {
+                return true;
+            }
+        } else {
+            // 按课程名称匹配：检查 td.jxbmc 中的教学班名称
+            const jxbmcCell = row.querySelector('td.jxbmc');
+            if (jxbmcCell) {
+                const jxbmcText = jxbmcCell.textContent.trim();
+                const courseName = extractCourseNameFromJxbmc(jxbmcText);
+                // 精确匹配或包含匹配
+                if (courseName === input || courseName.includes(input) || input.includes(courseName)) {
+                    return true;
+                }
             }
         }
 
-        if (!courseSection) {
-            // 如果没找到课程区域，尝试表格行方式
-            const courseRows = document.querySelectorAll('table tbody tr');
-            for (let row of courseRows) {
-                const cells = row.querySelectorAll('td');
-                for (let cell of cells) {
-                    if (cell.textContent.trim() === targetCourseCode) {
-                        // 找到课程号后，查找同一表格中的所有教学班
-                        const table = row.closest('table');
-                        if (table) {
-                            const allRows = table.querySelectorAll('tbody tr');
-                            for (let classRow of allRows) {
-                                const selectButton = classRow.querySelector('button, a, input[type="button"]');
-                                if (selectButton) {
-                                    const classInfo = extractTeachingClassInfo(classRow);
-                                    if (classInfo && classInfo.id) {
-                                        teachingClasses.push({
-                                            row: classRow,
-                                            info: classInfo,
-                                            button: selectButton,
-                                            courseCode: targetCourseCode
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                        break;
-                    }
-                }
-            }
-        } else {
-            // 在课程区域内查找所有教学班行
-            const classRows = courseSection.querySelectorAll('tr');
-            for (let row of classRows) {
+        return false;
+    }
+
+    // 查找目标课程的所有教学班（支持课程号和课程名称）
+    function findAllTeachingClasses(targetCourseCodeOrName) {
+        const teachingClasses = [];
+        const input = String(targetCourseCodeOrName).trim();
+        const isCode = isCourseCode(input);
+
+        // 方法1：直接遍历所有教学班行，按课程号或课程名称匹配
+        const allRows = document.querySelectorAll('table tbody tr.body_tr');
+        
+        for (let row of allRows) {
+            if (isRowMatchingCourse(row, input)) {
                 const selectButton = row.querySelector('button, a, input[type="button"]');
                 if (selectButton) {
                     const classInfo = extractTeachingClassInfo(row);
@@ -349,14 +395,87 @@
                             row: row,
                             info: classInfo,
                             button: selectButton,
-                            courseCode: targetCourseCode
+                            courseCode: targetCourseCodeOrName
                         });
                     }
                 }
             }
         }
 
-        log(`找到 ${teachingClasses.length} 个教学班`, 'info', targetCourseCode);
+        // 方法2：如果方法1没找到，尝试通过课程区域查找
+        if (teachingClasses.length === 0) {
+            // 查找包含目标课程的所有元素
+            const allElements = document.querySelectorAll('*');
+            let courseSection = null;
+
+            // 首先找到课程主行
+            for (let element of allElements) {
+                const text = element.textContent || '';
+                if (isCode) {
+                    // 课程号匹配
+                    if (text.includes(`(${input})`) || text.includes(input)) {
+                        courseSection = element.closest('div, section, table');
+                        break;
+                    }
+                } else {
+                    // 课程名称匹配
+                    if (text.includes(input)) {
+                        courseSection = element.closest('div, section, table');
+                        break;
+                    }
+                }
+            }
+
+            if (!courseSection) {
+                // 如果没找到课程区域，尝试表格行方式
+                const courseRows = document.querySelectorAll('table tbody tr');
+                for (let row of courseRows) {
+                    if (isRowMatchingCourse(row, input)) {
+                        // 找到匹配的行，查找同一表格中的所有教学班
+                        const table = row.closest('table');
+                        if (table) {
+                            const tableRows = table.querySelectorAll('tbody tr');
+                            for (let classRow of tableRows) {
+                                if (isRowMatchingCourse(classRow, input)) {
+                                    const selectButton = classRow.querySelector('button, a, input[type="button"]');
+                                    if (selectButton) {
+                                        const classInfo = extractTeachingClassInfo(classRow);
+                                        if (classInfo && classInfo.id) {
+                                            teachingClasses.push({
+                                                row: classRow,
+                                                info: classInfo,
+                                                button: selectButton,
+                                                courseCode: targetCourseCodeOrName
+                                            });
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            } else {
+                // 在课程区域内查找所有教学班行
+                const classRows = courseSection.querySelectorAll('tr');
+                for (let row of classRows) {
+                    const selectButton = row.querySelector('button, a, input[type="button"]');
+                    if (selectButton) {
+                        const classInfo = extractTeachingClassInfo(row);
+                        if (classInfo && classInfo.id) {
+                            teachingClasses.push({
+                                row: row,
+                                info: classInfo,
+                                button: selectButton,
+                                courseCode: targetCourseCodeOrName
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        log(`找到 ${teachingClasses.length} 个教学班`, 'info', targetCourseCodeOrName);
         return teachingClasses;
     }
 
@@ -1565,10 +1684,12 @@
     console.log('%c📋 配置示例:', 'color: #9370db; font-weight: bold;');
     console.log('  在脚本顶部修改 TARGET_COURSES:');
     console.log('  const TARGET_COURSES = [');
-    console.log('    { code: "CS101", priority: 1 },  // 高优先级，无过滤');
+    console.log('    { code: "23286514", priority: 1 },  // 使用课程号');
+    console.log('    { code: "机器学习", priority: 1 },  // 使用课程名称');
     console.log('    { code: "CS102", priority: 2, timeFilter: ["星期一", "第1-2节"] },  // 只选星期一或1-2节的课');
     console.log('    { code: "CS103", priority: 3, teacherFilter: ["张三", "讲师"] }  // 只选张三或讲师的课');
     console.log('  ];');
+    console.log('%c🆕 新功能: 支持课程号和课程名称两种输入方式！', 'color: #00ff00; font-weight: bold;');
     console.log('%c🔍 过滤器功能:', 'color: #ff1493; font-weight: bold;');
     console.log('  • timeFilter - 时间过滤（支持星期、节次等关键词）');
     console.log('  • teacherFilter - 教师过滤（支持教师姓名、职称等关键词）');
@@ -1942,7 +2063,7 @@
                 <!-- 课程管理 -->
                 <div class="cg-section">
                     <div class="cg-section-title">📚 添加目标课程</div>
-                    <input type="text" class="cg-input" id="cg-course-code" placeholder="课程号 (例: 23286514)">
+                    <input type="text" class="cg-input" id="cg-course-code" placeholder="课程号或课程名称 (例: 23286514 或 机器学习)">
                     <input type="number" class="cg-input" id="cg-course-priority" placeholder="优先级 (数字越小优先级越高)" value="1" min="1">
                     
                     <div class="cg-section-title" style="font-size: 13px; margin-top: 12px; margin-bottom: 8px;"> 目标课程的过滤器 (可选)</div>

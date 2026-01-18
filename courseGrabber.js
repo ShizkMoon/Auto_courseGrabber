@@ -54,7 +54,7 @@
     const RETRY_DELAY = 3000;               // 重试延迟(毫秒)
     const CONCURRENT_ENABLED = true;        // 是否启用并发抢课
     const CLICK2EXPEND_ENABLED = true;     // 用户设置: 是否在 jQuery 后自动展开目标课程信息，用于时间筛选和教师筛选
-    
+
     let click2expend_enabled = true;       // 用于脚本自动关闭
 
     // ========== 过滤器配置 ==========
@@ -185,13 +185,30 @@
                     const kcmcLink = kcmcSpan.querySelector('a');
                     if (kcmcLink) {
                         const courseName = kcmcLink.textContent.trim();
-                        // 精确匹配或包含匹配
-                        if (courseName === input || courseName.includes(input)) {
+                        // 宽松匹配：只要a元素内容包含用户输入就匹配（不区分大小写）
+                        if (courseName.toLowerCase().includes(input.toLowerCase())) {
                             matched = true;
                         }
                     }
                 }
             }
+            /*
+                                <div class="panel-heading kc_head" onclick="loadJxbxxZzxk(this)"
+                                    style="background-color:#C1FFC1;">
+                                    <h3 class="panel-title"><span class="kcmc" id="kcmc_23005523">(23005523)<a
+                                                href="javascript:void(0);"
+                                                onclick="showCourseInfo('23005523')">质量管理</a><i class="l-kc-xf"
+                                                style="display: inline;"> - <i id="xf_23005523">5.0</i>
+                                                学分</i></span><span>教学班个数：<font class="jxbgsxx">4</font></span><span
+                                            id="zt_txt_23005523">状态：<b>已选</b></span></h3><input type="hidden"
+                                        name="kch_id" value="23005523"><input type="hidden" name="kcxzzt"
+                                        id="kcxzzt_23005523" value="1"><input type="hidden" name="cxbj"
+                                        id="cxbj_23005523" value="0"><input type="hidden" name="fxbj" id="fxbj_23005523"
+                                        value="0"><input type="hidden" name="xxkbj" id="xxkbj_23005523" value="0"><input
+                                        type="hidden" name="czzt" value="0"><a href="javascript:void(0);"
+                                        class="expand_close expand1">展开关闭</a>
+                                </div>
+            */
 
             if (matched) {
                 // 直接触发 click（等价于用户点击）
@@ -383,7 +400,7 @@
 
         // 方法1：直接遍历所有教学班行，按课程号或课程名称匹配
         const allRows = document.querySelectorAll('table tbody tr.body_tr');
-        
+
         for (let row of allRows) {
             if (isRowMatchingCourse(row, input)) {
                 const selectButton = row.querySelector('button, a, input[type="button"]');

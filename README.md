@@ -2,7 +2,7 @@
 
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![JavaScript](https://img.shields.io/badge/language-JavaScript-yellow.svg)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
-[![Version](https://img.shields.io/badge/version-2.0-green.svg)](https://github.com/ceilf6)
+[![Version](https://img.shields.io/badge/version-2.3.2-green.svg)](https://github.com/ceilf6)
 
 一个功能强大的教务系统自动抢课脚本，支持多课程并发抢课、时间教师过滤、定时开抢等高级功能，配备美观的图形化操作界面。
 

@@ -39,6 +39,7 @@
 
   // ========== 防御性地保存原生方法引用 ==========
   // 在脚本执行前保存原生的 Array.prototype.filter，防止被页面污染
+  // 假如使用猴子补丁，可能会导致原先系统中的功能出错，还是选择耦合度低、入侵性小的方案
   const nativeArrayFilter = Array.prototype.filter;
   const nativeArrayMap = Array.prototype.map;
 

@@ -195,12 +195,14 @@
   }
 
   /**
-   * 判断输入是否为课程号（纯数字）
+   * 判断输入是否为课程号
+   * 正方课程号可能是纯数字，也可能是 2328A009 / CS102 这类字母数字混合格式。
    * @param {string} input - 用户输入
    * @returns {boolean} - 是否为课程号
    */
   function isCourseCode(input) {
-    return /^\d+$/.test(String(input).trim());
+    const value = String(input).trim();
+    return /^[A-Za-z0-9_-]+$/.test(value) && /\d/.test(value);
   }
 
   /**
@@ -216,41 +218,78 @@
     return match ? match[1].trim() : jxbmc.trim();
   }
 
+  function isCourseHeadMatching(head, courseCodeOrName) {
+    const input = String(courseCodeOrName).trim();
+    const isCode = isCourseCode(input);
+
+    if (isCode) {
+      const codeInput = head.querySelector('input[name="kch_id"]');
+      if (codeInput && String(codeInput.value).trim() === input) {
+        return true;
+      }
+
+      const kcmcText = head.querySelector("span.kcmc")?.textContent || "";
+      return kcmcText.includes(input);
+    }
+
+    const kcmcSpan = head.querySelector("span.kcmc");
+    const courseName =
+      kcmcSpan?.querySelector("a")?.textContent?.trim() ||
+      kcmcSpan?.textContent?.trim() ||
+      "";
+
+    return courseName.toLowerCase().includes(input.toLowerCase());
+  }
+
+  function findMatchingCourseHeads(courseCodeOrName) {
+    return Array.from(document.querySelectorAll(".panel-heading.kc_head")).filter(
+      (head) => isCourseHeadMatching(head, courseCodeOrName),
+    );
+  }
+
+  function getCourseSectionFromHead(head) {
+    return (
+      head.closest(".panel") ||
+      head.closest(".panel-info") ||
+      head.closest(".panel-default") ||
+      head.parentElement
+    );
+  }
+
+  function getTeachingRowsInCourseSection(head) {
+    const rows = [];
+    const seen = new Set();
+    const addRows = (rowList) => {
+      for (let row of rowList) {
+        if (!seen.has(row)) {
+          seen.add(row);
+          rows.push(row);
+        }
+      }
+    };
+
+    const section = getCourseSectionFromHead(head);
+    if (section) {
+      addRows(section.querySelectorAll("table tbody tr, table tr.body_tr"));
+    }
+
+    let sibling = head.nextElementSibling;
+    while (sibling && !sibling.matches(".panel-heading.kc_head")) {
+      addRows(sibling.querySelectorAll("table tbody tr, table tr.body_tr"));
+      sibling = sibling.nextElementSibling;
+    }
+
+    return rows;
+  }
+
   /**
    * 展开课程详情（支持课程号和课程名称）
    * @param {string} courseCodeOrName - 课程号或课程名称
    * @returns {boolean} - 是否成功展开
    */
   function expandCourseByCode(courseCodeOrName) {
-    // 找所有课程头
-    const heads = document.querySelectorAll(".panel-heading.kc_head");
-    const input = String(courseCodeOrName).trim();
-    const isCode = isCourseCode(input);
-
+    const heads = findMatchingCourseHeads(courseCodeOrName);
     for (let head of heads) {
-      let matched = false;
-
-      if (isCode) {
-        // 按课程号匹配
-        const codeInput = head.querySelector('input[name="kch_id"]');
-        if (codeInput && codeInput.value === input) {
-          matched = true;
-        }
-      } else {
-        // 按课程名称匹配
-        // 课程名称在 span.kcmc 下的 <a> 标签内，格式：(课程号)课程名称
-        const kcmcSpan = head.querySelector("span.kcmc");
-        if (kcmcSpan) {
-          const kcmcLink = kcmcSpan.querySelector("a");
-          if (kcmcLink) {
-            const courseName = kcmcLink.textContent.trim();
-            // 宽松匹配：只要a元素内容包含用户输入就匹配（不区分大小写）
-            if (courseName.toLowerCase().includes(input.toLowerCase())) {
-              matched = true;
-            }
-          }
-        }
-      }
       /*
                                 <div class="panel-heading kc_head" onclick="loadJxbxxZzxk(this)"
                                     style="background-color:#C1FFC1;">
@@ -268,12 +307,9 @@
                                         class="expand_close expand1">展开关闭</a>
                                 </div>
             */
-
-      if (matched) {
-        // 直接触发 click（等价于用户点击）
-        head.click();
-        return true;
-      }
+      // 直接触发 click（等价于用户点击）
+      head.click();
+      return true;
     }
     return false;
   }
@@ -476,32 +512,53 @@
   function findAllTeachingClasses(targetCourseCodeOrName) {
     const teachingClasses = [];
     const input = String(targetCourseCodeOrName).trim();
-    const isCode = isCourseCode(input);
+    const seenRows = new Set();
+
+    const pushTeachingClass = (row) => {
+      if (!row || seenRows.has(row)) {
+        return;
+      }
+
+      seenRows.add(row);
+      const selectButton = row.querySelector('button, a, input[type="button"]');
+      if (!selectButton) {
+        return;
+      }
+
+      const classInfo = extractTeachingClassInfo(row);
+      if (classInfo && classInfo.id) {
+        teachingClasses.push({
+          row: row,
+          info: classInfo,
+          button: selectButton,
+          courseCode: targetCourseCodeOrName,
+        });
+      }
+    };
 
     // 方法1：直接遍历所有教学班行，按课程号或课程名称匹配
     const allRows = document.querySelectorAll("table tbody tr.body_tr");
 
     for (let row of allRows) {
       if (isRowMatchingCourse(row, input)) {
-        const selectButton = row.querySelector(
-          'button, a, input[type="button"]',
-        );
-        if (selectButton) {
-          const classInfo = extractTeachingClassInfo(row);
-          if (classInfo && classInfo.id) {
-            teachingClasses.push({
-              row: row,
-              info: classInfo,
-              button: selectButton,
-              courseCode: targetCourseCodeOrName,
-            });
-          }
+        pushTeachingClass(row);
+      }
+    }
+
+    // 方法2：新版页面的教学班行可能不再包含课程号，改从匹配的课程头所在区域收集行
+    if (teachingClasses.length === 0) {
+      const heads = findMatchingCourseHeads(input);
+      for (let head of heads) {
+        const scopedRows = getTeachingRowsInCourseSection(head);
+        for (let row of scopedRows) {
+          pushTeachingClass(row);
         }
       }
     }
 
-    // 方法2：如果方法1没找到，尝试通过课程区域查找
+    // 方法3：如果方法1/2都没找到，再尝试通过课程区域查找
     if (teachingClasses.length === 0) {
+      const isCode = isCourseCode(input);
       // 查找包含目标课程的所有元素
       const allElements = document.querySelectorAll("*");
       let courseSection = null;
@@ -535,20 +592,7 @@
               const tableRows = table.querySelectorAll("tbody tr");
               for (let classRow of tableRows) {
                 if (isRowMatchingCourse(classRow, input)) {
-                  const selectButton = classRow.querySelector(
-                    'button, a, input[type="button"]',
-                  );
-                  if (selectButton) {
-                    const classInfo = extractTeachingClassInfo(classRow);
-                    if (classInfo && classInfo.id) {
-                      teachingClasses.push({
-                        row: classRow,
-                        info: classInfo,
-                        button: selectButton,
-                        courseCode: targetCourseCodeOrName,
-                      });
-                    }
-                  }
+                  pushTeachingClass(classRow);
                 }
               }
             }
@@ -559,20 +603,7 @@
         // 在课程区域内查找所有教学班行
         const classRows = courseSection.querySelectorAll("tr");
         for (let row of classRows) {
-          const selectButton = row.querySelector(
-            'button, a, input[type="button"]',
-          );
-          if (selectButton) {
-            const classInfo = extractTeachingClassInfo(row);
-            if (classInfo && classInfo.id) {
-              teachingClasses.push({
-                row: row,
-                info: classInfo,
-                button: selectButton,
-                courseCode: targetCourseCodeOrName,
-              });
-            }
-          }
+          pushTeachingClass(row);
         }
       }
     }

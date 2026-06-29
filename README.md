@@ -16,6 +16,12 @@
 2. 在浏览器开发者工具的 Console 中粘贴并运行 [`courseGrabber.js`](courseGrabber.js)。
 3. 在右上角控制台添加课程，设置优先级、时间/教师筛选或定时开抢，然后开始选课。
 
+## 示范教程
+
+https://bilibili.com/video/BV15q3xz5EzY/
+
+https://v.douyin.com/RETYdIcsiTQ/
+
 ## 🔎 适用范围与兼容性
 
 本项目服务于使用正方教务系统的高校选课场景；不同学校的系统版本、页面定制和选课规则可能不同，因此请区分以下三种证据：

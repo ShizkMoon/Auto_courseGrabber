@@ -43,3 +43,6 @@ pids
 .claude/
 
 web结构/
+
+# Tampermonkey loader (local only, not part of upstream)
+courseGrabber.user.js

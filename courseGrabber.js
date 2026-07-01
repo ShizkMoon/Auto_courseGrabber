@@ -1700,7 +1700,7 @@
       // 注意：attemptCount 在 attemptGrabCourse() 内部自增；如果这里先走“刷新分支”，
       // attemptGrabCourse() 会被延迟 1s，这段时间内 attemptCount 不变，会导致下一次 interval 再次满足 %8===0，
       // 从而出现“已触发jQuery搜索刷新”连续打印两次的现象。
-      if (attemptCount > 0 && attemptCount % 10 === 0 && !refreshInProgress) // (优化: 每10次刷新，减少DOM开销) {
+      if (attemptCount > 0 && attemptCount % 10 === 0 && !refreshInProgress) { // (优化: 每10次刷新，减少DOM开销)
         refreshInProgress = true;
         refreshCourseList();
         refreshTimeoutId = setTimeout(() => {

@@ -113,7 +113,7 @@
     // { code: 'CS104', priority: 4, timeFilter: ['第1-2节'], teacherFilter: ['王五'] }  // 同时过滤时间和教师
   ];
 
-  const CHECK_INTERVAL = 1000; // 检查间隔(毫秒)
+  const CHECK_INTERVAL = 200; // 检查间隔(毫秒) [优化: 1000→200]
   const MAX_ATTEMPTS = 3000; // 最大尝试次数
   const MAX_FAILED_ATTEMPTS = 10; // 最大连续失败次数
   const RETRY_DELAY = 3000; // 重试延迟(毫秒)
@@ -1000,12 +1000,12 @@
             setTimeout(() => {
               log(`✅ 已确认退选课程 ${courseCode}`, "success", courseCode);
               resolve(true);
-            }, 1500);
+            }, 500); // (优化: 1500→500)
           } else {
             log(`❌ 未找到退选确认按钮`, "error", courseCode);
             resolve(false);
           }
-        }, 800); // 增加等待时间，确保模态框完全加载
+        }, 300); // 等待模态框 (优化: 800→300)
       } catch (error) {
         log(`退选课程失败: ${error.message}`, "error", courseCode);
         resolve(false);
@@ -1285,14 +1285,14 @@
                       }
                     }
                     state.selecting = false;
-                  }, 3000); // 等待3秒再验证
+                  }, 800); // 等待800ms再验证 (优化: 3000→800)
                 }
-              }, 1000);
+              }, 300); // (优化: 1000→300)
 
               break;
             }
           }
-        }, 500);
+        }, 150); // (优化: 500→150)
 
         return true;
       } else {
@@ -1334,7 +1334,7 @@
 
       // 🔥 刷新后强制恢复展开
       if (click2expend_enabled && CLICK2EXPEND_ENABLED)
-        setTimeout(forceExpandTargetCoursesAggressive, 600);
+        setTimeout(forceExpandTargetCoursesAggressive, 200); // (优化: 600→200)
     } catch (e) {
       log(`刷新课程列表失败: ${e.message}`, "warning");
     }
@@ -1494,7 +1494,7 @@
               // 等待页面更新后立即选课
               setTimeout(() => {
                 selectTeachingClass(tc);
-              }, 1500);
+              }, 500); // (优化: 1500→500)
             } else {
               log(`❌ 退选失败，放弃本次选课`, "error", courseCode);
               addUILog &&
@@ -1700,14 +1700,14 @@
       // 注意：attemptCount 在 attemptGrabCourse() 内部自增；如果这里先走“刷新分支”，
       // attemptGrabCourse() 会被延迟 1s，这段时间内 attemptCount 不变，会导致下一次 interval 再次满足 %8===0，
       // 从而出现“已触发jQuery搜索刷新”连续打印两次的现象。
-      if (attemptCount > 0 && attemptCount % 3 === 0 && !refreshInProgress) {
+      if (attemptCount > 0 && attemptCount % 10 === 0 && !refreshInProgress) // (优化: 每10次刷新，减少DOM开销) {
         refreshInProgress = true;
         refreshCourseList();
         refreshTimeoutId = setTimeout(() => {
           refreshInProgress = false;
           refreshTimeoutId = null;
           attemptGrabCourse();
-        }, 1000); // 刷新后等待1秒再尝试
+        }, 300); // 刷新后等待300ms再尝试 (优化: 1000→300)
       } else {
         attemptGrabCourse();
       }
